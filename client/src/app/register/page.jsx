@@ -490,35 +490,6 @@ export default function RegisterPage() {
     return null;
   }, [errors, touched, form]);
 
-  const handleHierarchyChange = useCallback(async (name, value) => {
-    if (name === 'id_type') {
-      setForm(prev => ({ ...prev, [name]: value, id_number: '' }));
-      setIdNumberValid(null);
-      setErrors(prev => ({ ...prev, id_number: '' }));
-      setTouched(prev => ({ ...prev, [name]: true }));
-      return;
-    }
-
-    setForm(prev => ({ ...prev, [name]: value }));
-    setTouched(prev => ({ ...prev, [name]: true }));
-
-    if (name === 'county_id') {
-      if (value) await fetchConstituencies(value);
-      else { setConstituencies([]); setWards([]); setPollingStations([]); }
-    }
-    if (name === 'constituency_id') {
-      if (value) await fetchWards(value);
-      else { setWards([]); setPollingStations([]); }
-    }
-    if (name === 'ward_id') {
-      if (value) await fetchPollingStations(value);
-      else setPollingStations([]);
-    }
-
-    const error = validateField(name, value);
-    if (error) setErrors(prev => ({ ...prev, [name]: error }));
-  }, [fetchConstituencies, fetchWards, fetchPollingStations, validateField]);
-
   const validateStep = useCallback((stepNum) => {
     const stepFields = {
       1: ['first_name', 'last_name', 'id_type', 'id_number', 'date_of_birth', 'gender'],
