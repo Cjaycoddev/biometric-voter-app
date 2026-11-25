@@ -246,12 +246,6 @@ const handleChange = (name, value) => {
     return null;
   };
 
-  const handleBlur = (name) => {
-    setTouched(prev => ({ ...prev, [name]: true }));
-    const error = validateField(name, form[name]);
-    if (error) setErrors(prev => ({ ...prev, [name]: error }));
-  };
-
   const handleHierarchyChange = async (name, value) => {
     // Handle ID type change - reset ID number and validation
     if (name === 'id_type') {
