@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../../lib/api';
 import { useRouter } from 'next/navigation';
-import { User, ShieldCheck, LogOut, MapPin, Building2, Mail, Phone, IdCard } from 'lucide-react';
+import { User, ShieldCheck, LogOut, MapPin, Building2, Mail, Phone, Badge } from 'lucide-react';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
@@ -84,7 +84,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <IdCard className="w-6 h-6 text-gray-400" />
+              <Badge className="w-6 h-6 text-gray-400" />
               <div>
                 <p className="text-xs text-gray-500">ID Number</p>
                 <p className="font-medium">{user?.id_number}</p>

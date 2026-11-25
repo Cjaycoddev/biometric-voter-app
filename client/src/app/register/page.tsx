@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../../lib/api';
 import { useRouter } from 'next/navigation';
-import { CheckCircle, XCircle, AlertCircle, Loader2, User, Mail, Phone, IdCard, MapPin, Calendar, Shield } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Loader2, User, Mail, Phone, Badge, MapPin, Calendar, Shield } from 'lucide-react';
 
 const SEX_OPTIONS = ['Male', 'Female', 'Other'];
 const ID_TYPES = [
@@ -457,13 +457,13 @@ export default function RegisterPage() {
                   name="id_type"
                   options={ID_TYPES}
                   placeholder="Select ID type"
-                  icon={<IdCard className="w-5 h-5" />}
+                  icon={<Badge className="w-5 h-5" />}
                 />
                 <Input
                   label={form.id_type === 'national_id' ? 'National ID Number' : 'Passport Number'}
                   name="id_number"
                   type="text"
-                  icon={<IdCard className="w-5 h-5" />}
+                  icon={<Badge className="w-5 h-5" />}
                   placeholder={form.id_type === 'national_id' ? '12345678' : 'A1234567'}
                   maxLength={form.id_type === 'national_id' ? 8 : 20}
                 />
