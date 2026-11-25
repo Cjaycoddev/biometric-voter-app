@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiRequest } from '../../lib/api';
 import { useRouter } from 'next/navigation';
-import { CheckCircle, XCircle, AlertCircle, Loader2, User, Mail, Phone, Badge, MapPin, Calendar, Shield } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Loader2, User, Mail, Phone, Badge, MapPin, Calendar, Shield, Camera, Fingerprint, Zap } from 'lucide-react';
+import { getCounties, getConstituencies, getWards, getPollingStations } from '../../lib/kenyaLocations';
 
-const SEX_OPTIONS = ['Male', 'Female', 'Other'];
-const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 const ID_TYPES = [
   { value: 'national_id', label: 'National ID (7-8 digits)' },
   { value: 'passport', label: 'Passport' },
 ];
+const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 
 function formatPhoneInput(value) {
   const cleaned = value.replace(/\D/g, '');
@@ -37,8 +37,130 @@ function validateName(name) {
   return /^[a-zA-Z\s'-]+$/.test(name.trim());
 }
 
+const IEBC_LOGO = "https://www.iebc.or.ke/wp-content/uploads/2020/07/IEBC-Logo.png";
+
+function Input({ label, name, type = 'text', icon, children, errors, touched, form, handleChange, handleBlur, getFieldIcon, ...props }) {
+  return (
+    <div className="space-y-1">
+      <label className="block text-sm font-medium text-black pl-1">{label} <span className="text-red-500">*</span></label>
+      <div className="relative">
+        {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">{icon}</div>}
+        {children || (
+          <input
+            type={type}
+            name={name}
+            className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none transition ${
+              errors[name] && touched[name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+            }`}
+            value={form[name]}
+            onChange={(e) => handleChange(name, e.target.value)}
+            onBlur={() => handleBlur(name)}
+            {...props}
+          />
+        )}
+        {getFieldIcon(name) && <div className="absolute inset-y-0 right-0 pr-3 flex items-center">{getFieldIcon(name)}</div>}
+      </div>
+      {errors[name] && touched[name] && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[name]}</p>}
+    </div>
+  );
+}
+
+function SearchableSelect({ label, name, options, placeholder, icon, disabled, errors, touched, form, handleChange, handleBlur, getFieldIcon, ...props }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  const filteredOptions = options.filter(opt =>
+    (opt.name || opt.label || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleOptionClick = (optionId) => {
+    handleChange(name, optionId);
+    setIsOpen(false);
+    setSearchTerm('');
+    handleBlur(name);
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        setSearchTerm('');
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="space-y-1" ref={dropdownRef}>
+      <label className="block text-sm font-medium text-black pl-1">{label} <span className="text-red-500">*</span></label>
+      <div className="relative">
+        {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">{icon}</div>}
+        
+        <div className="relative">
+          <input
+            type="text"
+            readOnly
+            className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none appearance-none transition ${
+              errors[name] && touched[name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+            } ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            value={options.find(opt => opt.id === form[name])?.name || options.find(opt => opt.id === form[name])?.label || ''}
+            placeholder={placeholder}
+            onClick={() => !disabled && setIsOpen(true)}
+            onFocus={() => !disabled && setIsOpen(true)}
+            disabled={disabled}
+          />
+          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </div>
+          {getFieldIcon(name) && <div className="absolute inset-y-0 right-0 pr-10 flex items-center">{getFieldIcon(name)}</div>}
+        </div>
+
+        {isOpen && !disabled && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-auto">
+            <div className="p-2 border-b border-gray-100">
+              <input
+                type="text"
+                placeholder="Search..."
+                className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:outline-none text-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+              />
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+              {filteredOptions.length === 0 ? (
+                <div className="px-4 py-3 text-sm text-gray-500">No options found</div>
+              ) : (
+                filteredOptions.map(opt => (
+                  <div
+                    key={opt.id}
+                    className={`px-4 py-3 text-sm hover:bg-gray-100 cursor-pointer transition ${
+                      form[name] === opt.id ? 'bg-black text-white' : 'text-gray-700'
+                    }`}
+                    onClick={() => handleOptionClick(opt.id)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {opt.name || opt.label}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {errors[name] && touched[name] && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[name]}</p>}
+    </div>
+  );
+}
+
 export default function RegisterPage() {
-  const [step, setStep] = useState(1); // 1: personal, 2: location, 3: credentials
+  const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     first_name: '',
     middle_name: '',
@@ -63,67 +185,195 @@ export default function RegisterPage() {
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  // Dropdown data
-  const [counties, setCounties] = useState([]);
+  // Static location data - no API calls needed
+  const counties = getCounties();
   const [constituencies, setConstituencies] = useState([]);
   const [wards, setWards] = useState([]);
   const [pollingStations, setPollingStations] = useState([]);
 
-  // Validation states
   const [idNumberValid, setIdNumberValid] = useState(null);
   const [phoneValid, setPhoneValid] = useState(null);
   const [emailValid, setEmailValid] = useState(null);
+  const [faceEnrolled, setFaceEnrolled] = useState(false);
+  const [faceEnrolling, setFaceEnrolling] = useState(false);
+  const [faceError, setFaceError] = useState('');
+  const [fingerprintEnrolled, setFingerprintEnrolled] = useState(false);
+  const [fingerprintEnrolling, setFingerprintEnrolling] = useState(false);
+  const [fingerprintError, setFingerprintError] = useState('');
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const router = useRouter();
 
-  // Fetch counties on mount
-  useEffect(() => {
-    fetchCounties();
-  }, []);
-
-  const fetchCounties = async () => {
-    try {
-      const data = await apiRequest('/public/counties');
-      setCounties(data.data || []);
-    } catch (err) {
-      console.error('Failed to fetch counties:', err);
+  // Handle hierarchy changes with static data
+  const handleHierarchyChange = useCallback(async (name, value) => {
+    if (name === 'id_type') {
+      setForm(prev => ({ ...prev, [name]: value, id_number: '' }));
+      setIdNumberValid(null);
+      setErrors(prev => ({ ...prev, id_number: '' }));
+      setTouched(prev => ({ ...prev, [name]: true }));
+      return;
     }
-  };
 
-  const fetchConstituencies = async (countyId) => {
-    try {
-      const data = await apiRequest(`/public/constituencies?county_id=${countyId}`);
-      setConstituencies(data.data || []);
-      setForm(prev => ({ ...prev, constituency_id: '', ward_id: '', polling_station_id: '' }));
+    setForm(prev => ({ ...prev, [name]: value }));
+    setTouched(prev => ({ ...prev, [name]: true }));
+
+    if (name === 'county_id') {
+      if (value) {
+        setConstituencies(getConstituencies(value));
+      } else {
+        setConstituencies([]);
+      }
       setWards([]);
       setPollingStations([]);
-    } catch (err) {
-      console.error('Failed to fetch constituencies:', err);
+      setForm(prev => ({ ...prev, constituency_id: '', ward_id: '', polling_station_id: '' }));
     }
-  };
-
-  const fetchWards = async (constituencyId) => {
-    try {
-      const data = await apiRequest(`/public/wards?constituency_id=${constituencyId}`);
-      setWards(data.data || []);
-      setForm(prev => ({ ...prev, ward_id: '', polling_station_id: '' }));
+    if (name === 'constituency_id') {
+      if (value) {
+        setWards(getWards(value));
+      } else {
+        setWards([]);
+      }
       setPollingStations([]);
-    } catch (err) {
-      console.error('Failed to fetch wards:', err);
+      setForm(prev => ({ ...prev, ward_id: '', polling_station_id: '' }));
     }
-  };
-
-  const fetchPollingStations = async (wardId) => {
-    try {
-      const data = await apiRequest(`/public/polling-stations?ward_id=${wardId}`);
-      setPollingStations(data.data || []);
+    if (name === 'ward_id') {
+      if (value) {
+        setPollingStations(getPollingStations(value));
+      } else {
+        setPollingStations([]);
+      }
       setForm(prev => ({ ...prev, polling_station_id: '' }));
-    } catch (err) {
-      console.error('Failed to fetch polling stations:', err);
     }
-  };
 
-  // Validation functions
-  const validateField = (name, value) => {
+    const error = validateField(name, value);
+    if (error) setErrors(prev => ({ ...prev, [name]: error }));
+  }, [validateField]);
+
+  // Face enrollment using webcam
+  const startFaceEnrollment = useCallback(async () => {
+    if (!videoRef.current) return;
+    setFaceEnrolling(true);
+    setFaceError('');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+      videoRef.current.srcObject = stream;
+
+      // Wait for video to be ready
+      await new Promise(resolve => {
+        videoRef.current.onloadeddata = () => {
+          videoRef.current.play();
+          resolve();
+        };
+      });
+
+      // Capture frame
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+
+      // Stop stream
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+
+      // Convert to base64
+      const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+      // Send to server for face template creation
+      const token = localStorage.getItem('token');
+      const res = await apiRequest('/biometric/enroll-face', {
+        method: 'POST',
+        body: JSON.stringify({ image: imageData }),
+      });
+
+      if (res.success) {
+        setFaceEnrolled(true);
+      } else {
+        setFaceError(res.error || 'Face enrollment failed');
+      }
+    } catch (err) {
+      console.error('Face enrollment error:', err);
+      setFaceError(err.message || 'Camera access denied. Please allow camera permission.');
+    } finally {
+      setFaceEnrolling(false);
+    }
+  }, []);
+
+  const retakeFace = useCallback(() => {
+    setFaceEnrolled(false);
+    setFaceError('');
+  }, []);
+
+  // Fingerprint/device biometric enrollment using WebAuthn
+  const startFingerprintEnrollment = useCallback(async () => {
+    setFingerprintEnrolling(true);
+    setFingerprintError('');
+
+    try {
+      // Get challenge from server
+      const token = localStorage.getItem('token');
+      const challengeRes = await apiRequest('/webauthn/register/start', {
+        method: 'POST',
+      });
+
+      if (!challengeRes.challenge) throw new Error('Failed to get challenge');
+
+      const challenge = Uint8Array.from(atob(challengeRes.challenge), c => c.charCodeAt(0));
+
+      // Request credential creation
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'IEBC Voter Verification', id: window.location.hostname },
+          user: {
+            id: Uint8Array.from(form.id_number, c => c.charCodeAt(0)),
+            name: form.phone,
+            displayName: `${form.first_name} ${form.last_name}`,
+          },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            userVerification: 'required',
+            requireResidentKey: false,
+          },
+          timeout: 60000,
+          attestation: 'none',
+        },
+      });
+
+      if (!credential) throw new Error('No credential created');
+
+      // Send to server for verification
+      const attestationResponse = credential.response;
+      const verificationRes = await apiRequest('/webauthn/register/finish', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: credential.id,
+          rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
+          response: {
+            attestationObject: btoa(String.fromCharCode(...new Uint8Array(attestationResponse.attestationObject))),
+            clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(attestationResponse.clientDataJSON))),
+          },
+          type: credential.type,
+        }),
+      });
+
+      if (verificationRes.success) {
+        setFingerprintEnrolled(true);
+      } else {
+        setFingerprintError(verificationRes.error || 'Fingerprint enrollment failed');
+      }
+    } catch (err) {
+      console.error('Fingerprint enrollment error:', err);
+      setFingerprintError(err.message || 'Biometric enrollment failed. Ensure you have a fingerprint sensor or Face ID.');
+    } finally {
+      setFingerprintEnrolling(false);
+    }
+  }, [form.id_number, form.phone, form.first_name, form.last_name]);
+
+  const validateField = useCallback((name, value) => {
     let error = '';
     switch (name) {
       case 'first_name':
@@ -189,19 +439,17 @@ export default function RegisterPage() {
         break;
     }
     return error;
-  };
+  }, [form.id_type, form.password]);
 
-const handleChange = (name, value) => {
+  const handleChange = useCallback((name, value) => {
     let newValue = value;
     if (name === 'id_number') newValue = value.toUpperCase();
-    // Prevent numbers in name fields
     if (['first_name', 'middle_name', 'last_name'].includes(name)) {
       newValue = value.replace(/[^a-zA-Z\s'-]/g, '');
     }
 
     setForm(prev => ({ ...prev, [name]: newValue }));
 
-    // Real-time validation for async fields (only for ID number - no phone formatting during typing)
     if (name === 'id_number' && newValue.length >= 6) {
       setLoading(true);
       apiRequest(`/public/validate-id?id_number=${encodeURIComponent(newValue)}`)
@@ -212,22 +460,18 @@ const handleChange = (name, value) => {
     if (name === 'email' && newValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newValue)) {
       setEmailValid(true);
     }
-
-    // Clear error when user types
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
-  };
+  }, [errors]);
 
-  const handleBlur = (name) => {
+  const handleBlur = useCallback((name) => {
     setTouched(prev => ({ ...prev, [name]: true }));
-    // Format phone on blur
     if (name === 'phone' && form.phone) {
       const formatted = formatPhoneInput(form.phone);
       if (formatted !== form.phone) {
         setForm(prev => ({ ...prev, phone: formatted }));
       }
-      // Validate phone after formatting
       if (validateKenyanPhone(formatted)) {
         setLoading(true);
         apiRequest(`/public/validate-phone?phone=${encodeURIComponent(formatted)}`)
@@ -238,16 +482,15 @@ const handleChange = (name, value) => {
     }
     const error = validateField(name, form[name]);
     if (error) setErrors(prev => ({ ...prev, [name]: error }));
-  };
+  }, [form.phone, validateField]);
 
-  const getFieldIcon = (name) => {
+  const getFieldIcon = useCallback((name) => {
     if (errors[name] && touched[name]) return <XCircle className="w-5 h-5 text-red-500" />;
     if (!errors[name] && touched[name] && form[name]) return <CheckCircle className="w-5 h-5 text-green-500" />;
     return null;
-  };
+  }, [errors, touched, form]);
 
-  const handleHierarchyChange = async (name, value) => {
-    // Handle ID type change - reset ID number and validation
+  const handleHierarchyChange = useCallback(async (name, value) => {
     if (name === 'id_type') {
       setForm(prev => ({ ...prev, [name]: value, id_number: '' }));
       setIdNumberValid(null);
@@ -274,14 +517,14 @@ const handleChange = (name, value) => {
 
     const error = validateField(name, value);
     if (error) setErrors(prev => ({ ...prev, [name]: error }));
-  };
+  }, [fetchConstituencies, fetchWards, fetchPollingStations, validateField]);
 
-  const validateStep = (stepNum) => {
-const stepFields = {
-    1: ['first_name', 'last_name', 'id_type', 'id_number', 'date_of_birth', 'gender'],
-    2: ['county_id', 'constituency_id', 'ward_id', 'polling_station_id'],
-    3: ['phone', 'email', 'password', 'confirm_password'],
-  };
+  const validateStep = useCallback((stepNum) => {
+    const stepFields = {
+      1: ['first_name', 'last_name', 'id_type', 'id_number', 'date_of_birth', 'gender'],
+      2: ['county_id', 'constituency_id', 'ward_id', 'polling_station_id'],
+      3: ['phone', 'email', 'password', 'confirm_password'],
+    };
     const fields = stepFields[stepNum] || [];
     let valid = true;
     const newErrors = {};
@@ -294,7 +537,6 @@ const stepFields = {
       }
     });
 
-    // Check async validations
     if (stepNum === 1) {
       if (idNumberValid === false) { newErrors.id_number = 'This ID number is already registered'; valid = false; }
       if (phoneValid === false) { newErrors.phone = 'This phone is already registered'; valid = false; }
@@ -303,17 +545,17 @@ const stepFields = {
     setErrors(prev => ({ ...prev, ...newErrors }));
     fields.forEach(name => setTouched(prev => ({ ...prev, [name]: true })));
     return valid;
-  };
+  }, [form, idNumberValid, phoneValid, validateField]);
 
-  const nextStep = () => {
+  const nextStep = useCallback(() => {
     if (validateStep(step)) setStep(step + 1);
-  };
+  }, [step, validateStep]);
 
-  const prevStep = () => {
+  const prevStep = useCallback(() => {
     setStep(step - 1);
-  };
+  }, [step]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
 
@@ -350,72 +592,18 @@ const stepFields = {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const Input = ({ label, name, type = 'text', icon, children, errors, touched, form, handleChange, handleBlur, getFieldIcon, ...props }) => (
-    <div className="space-y-1">
-      <label className="block text-sm font-medium text-black pl-1">{label} <span className="text-red-500">*</span></label>
-      <div className="relative">
-        {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">{icon}</div>}
-        {children || (
-          <input
-            type={type}
-            name={name}
-            className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none transition ${
-              errors[name] && touched[name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-            }`}
-            value={form[name]}
-            onChange={(e) => handleChange(name, e.target.value)}
-            onBlur={() => handleBlur(name)}
-            {...props}
-          />
-        )}
-        {getFieldIcon(name) && <div className="absolute inset-y-0 right-0 pr-3 flex items-center">{getFieldIcon(name)}</div>}
-      </div>
-      {errors[name] && touched[name] && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[name]}</p>}
-    </div>
-  );
-
-  const Select = ({ label, name, options, placeholder, icon, disabled, errors, touched, form, handleChange, handleBlur, getFieldIcon, ...props }) => (
-    <div className="space-y-1">
-      <label className="block text-sm font-medium text-black pl-1">{label} <span className="text-red-500">*</span></label>
-      <div className="relative">
-        {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">{icon}</div>}
-        <select
-          name={name}
-          className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none appearance-none transition ${
-            errors[name] && touched[name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-          } ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-          value={form[name]}
-          onChange={(e) => handleChange(name, e.target.value)}
-          onBlur={() => handleBlur(name)}
-          disabled={disabled}
-          {...props}
-        >
-          <option value="">{placeholder}</option>
-          {options.map(opt => (
-            <option key={opt.id} value={opt.id}>{opt.name || opt.label}</option>
-          ))}
-        </select>
-        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-        </div>
-        {getFieldIcon(name) && <div className="absolute inset-y-0 right-0 pr-10 flex items-center">{getFieldIcon(name)}</div>}
-      </div>
-      {errors[name] && touched[name] && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors[name]}</p>}
-    </div>
-  );
+  }, [form, validateStep, router]);
 
   if (submitSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center bg-white p-12 rounded-2xl shadow-xl max-w-md">
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center bg-white p-12 rounded-2xl shadow-xl max-w-md border-4 border-black">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Registration Successful!</h1>
+          <h1 className="text-2xl font-bold text-black mb-2">Registration Successful!</h1>
           <p className="text-gray-600 mb-6">Your account has been created. Redirecting to login...</p>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto"></div>
         </div>
       </div>
     );
@@ -427,7 +615,7 @@ const stepFields = {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/90 backdrop-blur rounded-full shadow-lg mb-6 border-2 border-black">
-            <Shield className="w-8 h-8 text-black" />
+            <img src={IEBC_LOGO} alt="IEBC" className="w-10 h-10" />
             <span className="text-xl font-bold text-black">IEBC</span>
           </div>
           <h1 className="text-3xl font-bold text-black mb-2">Voter Registration</h1>
@@ -456,7 +644,7 @@ const stepFields = {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8">
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200">
           {submitError && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -480,7 +668,7 @@ const stepFields = {
               <Input label="Last Name" name="last_name" type="text" icon={<User className="w-5 h-5" />} placeholder="Doe" errors={errors} touched={touched} form={form} handleChange={handleChange} handleBlur={handleBlur} getFieldIcon={getFieldIcon} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Select
+                <SearchableSelect
                   label="ID Type"
                   name="id_type"
                   options={ID_TYPES}
@@ -525,7 +713,7 @@ const stepFields = {
                   handleBlur={handleBlur}
                   getFieldIcon={getFieldIcon}
                 />
-                <Select
+                <SearchableSelect
                   label="Gender"
                   name="gender"
                   options={GENDER_OPTIONS.map(s => ({ id: s, name: s }))}
@@ -559,7 +747,7 @@ const stepFields = {
               <p className="text-sm text-gray-500 mb-6">Select your polling station by drilling down through Kenya's administrative hierarchy</p>
 
               <div className="space-y-4">
-                <Select
+                <SearchableSelect
                   label="County"
                   name="county_id"
                   options={counties}
@@ -573,7 +761,7 @@ const stepFields = {
                   handleBlur={handleBlur}
                   getFieldIcon={getFieldIcon}
                 />
-                <Select
+                <SearchableSelect
                   label="Constituency"
                   name="constituency_id"
                   options={constituencies}
@@ -587,7 +775,7 @@ const stepFields = {
                   handleBlur={handleBlur}
                   getFieldIcon={getFieldIcon}
                 />
-                <Select
+                <SearchableSelect
                   label="Ward (CAW)"
                   name="ward_id"
                   options={wards}
@@ -601,7 +789,7 @@ const stepFields = {
                   handleBlur={handleBlur}
                   getFieldIcon={getFieldIcon}
                 />
-                <Select
+                <SearchableSelect
                   label="Polling Station"
                   name="polling_station_id"
                   options={pollingStations}
@@ -650,7 +838,7 @@ const stepFields = {
             </div>
           )}
 
-          {/* Step 3: Credentials */}
+          {/* Step 3: Credentials & Biometrics */}
           {step === 3 && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex items-center gap-2 text-black mb-4">
@@ -723,12 +911,103 @@ const stepFields = {
                 getFieldIcon={getFieldIcon}
               />
 
+              {/* Biometric Enrollment */}
+              <div className="pt-6 border-t border-gray-100">
+                <div className="flex items-center gap-2 text-black mb-4">
+                  <Fingerprint className="w-5 h-5" />
+                  <h3 className="text-lg font-semibold">Biometric Enrollment</h3>
+                </div>
+                <p className="text-sm text-gray-500 mb-4">Enroll your biometrics using your phone's camera and fingerprint sensor</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Face Enrollment */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Camera className="w-5 h-5 text-black" />
+                      <h4 className="font-semibold text-black">Face Verification</h4>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4">Capture your face for facial recognition during voting</p>
+                    <div className="bg-black rounded-lg aspect-video flex items-center justify-center mb-4">
+                      <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+                      <canvas ref={canvasRef} className="hidden" />
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={startFaceEnrollment}
+                        disabled={faceEnrolling}
+                        className="flex-1 py-3 bg-black text-white rounded-lg font-semibold disabled:opacity-50 hover:bg-gray-900 transition flex items-center justify-center gap-2"
+                      >
+                        {faceEnrolling ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" /> Enrolling...
+                          </>
+                        ) : faceEnrolled ? (
+                          <>
+                            <CheckCircle className="w-5 h-5" /> Enrolled
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="w-5 h-5" /> Capture Face
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={retakeFace}
+                        disabled={!faceEnrolled}
+                        className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold disabled:opacity-50 hover:bg-gray-50 transition flex items-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> Retake
+                      </button>
+                    </div>
+                    {faceError && <p className="mt-2 text-sm text-red-500">{faceError}</p>}
+                    {faceEnrolled && <p className="mt-2 text-sm text-green-600">✓ Face enrolled successfully</p>}
+                  </div>
+
+                  {/* Fingerprint Enrollment (WebAuthn) */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Fingerprint className="w-5 h-5 text-black" />
+                      <h4 className="font-semibold text-black">Fingerprint / Device Biometric</h4>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4">Use your device's fingerprint sensor, Face ID, or Windows Hello</p>
+                    <div className="bg-white border border-gray-200 rounded-lg p-8 text-center mb-4">
+                      <Zap className="w-16 h-16 text-black mx-auto mb-4" />
+                      <p className="text-gray-600 mb-4">Ready to enroll device biometric</p>
+                      <button
+                        type="button"
+                        onClick={startFingerprintEnrollment}
+                        disabled={fingerprintEnrolling}
+                        className="w-full max-w-xs mx-auto py-3 bg-black text-white rounded-lg font-semibold disabled:opacity-50 hover:bg-gray-900 transition flex items-center justify-center gap-2"
+                      >
+                        {fingerprintEnrolling ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" /> Enrolling...
+                          </>
+                        ) : fingerprintEnrolled ? (
+                          <>
+                            <CheckCircle className="w-5 h-5" /> Enrolled
+                          </>
+                        ) : (
+                          <>
+                            <Fingerprint className="w-5 h-5" /> Enroll Fingerprint
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {fingerprintError && <p className="text-sm text-red-500">{fingerprintError}</p>}
+                    {fingerprintEnrolled && <p className="text-sm text-green-600">✓ Device biometric enrolled successfully</p>}
+                  </div>
+                </div>
+              </div>
+
               {/* Step Navigation */}
               <div className="flex justify-between pt-4 border-t border-gray-100">
                 <button type="button" onClick={prevStep} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg> Back
                 </button>
-                <button type="submit" disabled={submitting} className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold disabled:opacity-50 hover:bg-green-700 transition flex items-center gap-2">
+                <button type="submit" disabled={submitting || !faceEnrolled || !fingerprintEnrolled} className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold disabled:opacity-50 hover:bg-green-700 transition flex items-center gap-2">
                   {submitting ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" /> Creating Account...
