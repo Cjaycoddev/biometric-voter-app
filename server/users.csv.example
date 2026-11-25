@@ -1,0 +1,4 @@
+email,phone,full_name,id_number,password,polling_station
+voter1@example.com,+254700123456,John Kamau,12345678,SecurePass1!,"Kasarani Primary School"
+voter2@example.com,+254711234567,Mary Wanjiku,87654321,SecurePass2!,"Kasarani Primary School"
+voter3@example.com,+254722345678,Peter Otieno,23456789,SecurePass3!,"Kasarani Primary School"
