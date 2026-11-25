@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { apiRequest } from '@/lib/api';
+import { apiRequest } from '../../lib/api';
 import { useRouter } from 'next/navigation';
 import {
   Users, BarChart3, Search, Filter, ChevronDown, ChevronUp,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { apiRequest } from '@/lib/api';
+import { apiRequest } from '../../lib/api';
 import { useRouter } from 'next/navigation';
 import { Camera, Fingerprint, ShieldCheck, Loader2, User, MapPin, AlertCircle, CheckCircle, XCircle, Zap } from 'lucide-react';
 

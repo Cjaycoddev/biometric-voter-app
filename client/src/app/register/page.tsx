@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { apiRequest } from '@/lib/api';
+import { apiRequest } from '../../lib/api';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, XCircle, AlertCircle, Loader2, User, Mail, Phone, IdCard, MapPin, Calendar, Shield } from 'lucide-react';
 
