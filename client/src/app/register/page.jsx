@@ -428,7 +428,7 @@ const stepFields = {
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/90 backdrop-blur rounded-full shadow-lg mb-6 border-2 border-black">
             <Shield className="w-8 h-8 text-black" />
-            <span className="text-xl font-bold text-black">MwananchiBallot</span>
+            <span className="text-xl font-bold text-black">IEBC</span>
           </div>
           <h1 className="text-3xl font-bold text-black mb-2">Voter Registration</h1>
           <p className="text-gray-700">Register as a Kenyan voter with biometric verification</p>

@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation';
 import { User, ShieldCheck, LogOut, MapPin, Building2, Mail, Phone, Badge } from 'lucide-react';
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null);
-  const [templates, setTemplates] = useState<any[]>([]);
+  const [user, setUser] = useState(null);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -61,8 +61,8 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50 p-4">
       <nav className="bg-white p-4 rounded-xl shadow mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <User className="w-6 h-6 text-blue-600" />
-          <span className="font-semibold text-gray-900">EngageLoop</span>
+          <User className="w-6 h-6 text-black" />
+          <span className="font-semibold text-black">IEBC</span>
         </div>
         <button onClick={handleLogout} className="text-sm text-red-600 hover:underline flex items-center gap-1">
           <LogOut className="w-4 h-4" /> Sign out

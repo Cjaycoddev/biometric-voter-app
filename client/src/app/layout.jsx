@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'EngageLoop - Kenyan Biometric Voter Verification',
-  description: 'Secure voter verification using face and fingerprint biometrics',
+  title: 'IEBC - Kenya Biometric Voter Verification',
+  description: 'Kenya\'s secure voter verification using face and fingerprint biometrics',
 };
 
 export default function RootLayout({ children }) {

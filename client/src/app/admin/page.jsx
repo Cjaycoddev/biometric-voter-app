@@ -316,9 +316,9 @@ export default function AdminDashboard() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-full mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-blue-600" />
-            <h1 className="text-xl font-bold text-gray-900">EngageLoop Admin</h1>
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">Voter Registry</span>
+            <Shield className="w-8 h-8 text-black" />
+            <h1 className="text-xl font-bold text-black">IEBC Admin</h1>
+            <span className="px-2 py-1 bg-black text-white rounded-full text-xs font-medium">Voter Registry</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">Welcome, {user?.full_name}</span>
