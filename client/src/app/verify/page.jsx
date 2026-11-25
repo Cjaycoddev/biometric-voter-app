@@ -7,21 +7,21 @@ import { Camera, Fingerprint, ShieldCheck, Loader2, User, MapPin, AlertCircle, C
 
 const WEBAUTHN_RP_ID = process.env.NEXT_PUBLIC_WEBAUTHN_RP_ID || 'localhost';
 
-function bufferToBase64url(buffer: ArrayBuffer): string {
+function bufferToBase64url(buffer) {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '');
 }
 
-function base64urlToBuffer(base64url: string): Uint8Array {
+function base64urlToBuffer(base64url) {
   const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
   const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + padding;
   const raw = atob(base64);
   return Uint8Array.from(raw, c => c.charCodeAt(0));
 }
 
-function coerceToArrayBuffer(arg: any): ArrayBuffer {
+function coerceToArrayBuffer(arg) {
   if (arg instanceof ArrayBuffer) return arg;
   if (arg && arg.buffer instanceof ArrayBuffer) return arg.buffer;
   if (arg && typeof arg === 'object') {
@@ -36,19 +36,19 @@ function coerceToArrayBuffer(arg: any): ArrayBuffer {
 }
 
 export default function VerifyPage() {
-  const [method, setMethod] = useState<'face' | 'fingerprint'>('face');
+  const [method, setMethod] = useState('face');
   const [faceEnrolled, setFaceEnrolled] = useState(false);
   const [fingerprintEnrolled, setFingerprintEnrolled] = useState(false);
-  const [faceResult, setFaceResult] = useState<{ verified: boolean; score: number; message: string } | null>(null);
-  const [fingerprintResult, setFingerprintResult] = useState<{ verified: boolean; score: number; message: string } | null>(null);
+  const [faceResult, setFaceResult] = useState(null);
+  const [fingerprintResult, setFingerprintResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
   const [showVoterDetails, setShowVoterDetails] = useState(false);
-  const [pollingStation, setPollingStation] = useState<any>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [pollingStation, setPollingStation] = useState(null);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [facingMode, setFacingMode] = useState('user');
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -65,14 +65,13 @@ export default function VerifyPage() {
     try {
       const data = await apiRequest('/biometric/my-templates');
       const templates = data.templates || [];
-      setFaceEnrolled(templates.some((t: any) => t.template_type === 'face'));
-      setFingerprintEnrolled(templates.some((t: any) => t.template_type === 'fingerprint'));
+      setFaceEnrolled(templates.some(t => t.template_type === 'face'));
+      setFingerprintEnrolled(templates.some(t => t.template_type === 'fingerprint'));
     } catch (err) {
       console.error('Failed to check templates:', err);
     }
   };
 
-  // Camera setup
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -96,7 +95,7 @@ export default function VerifyPage() {
     }
   };
 
-  const captureFaceImage = (): string | null => {
+  const captureFaceImage = () => {
     if (!videoRef.current || !canvasRef.current) return null;
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -105,7 +104,6 @@ export default function VerifyPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0);
-    // Return base64 without data URL prefix
     return canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
   };
 
@@ -120,7 +118,7 @@ export default function VerifyPage() {
       });
       setFaceEnrolled(true);
       alert('Face enrolled successfully!');
-    } catch (err: any) {
+    } catch (err) {
       alert(err.data?.error || 'Face enrollment failed');
     } finally {
       setLoading(false);
@@ -142,7 +140,7 @@ export default function VerifyPage() {
         message: data.message,
       });
       checkVerificationComplete();
-    } catch (err: any) {
+    } catch (err) {
       setFaceResult({
         verified: false,
         score: err.data?.score ?? 0,
@@ -159,7 +157,6 @@ export default function VerifyPage() {
     }
     setLoading(true);
     try {
-      // Start registration
       const startRes = await apiRequest('/biometric/webauthn/register/start', {
         method: 'POST',
       });
@@ -167,22 +164,19 @@ export default function VerifyPage() {
       options.challenge = base64urlToBuffer(options.challenge);
       options.user.id = base64urlToBuffer(options.user.id);
 
-      // Call WebAuthn
-      const credential = await navigator.credentials.create({ publicKey: options as any });
+      const credential = await navigator.credentials.create({ publicKey: options });
 
-      // Convert to JSON-serializable format
       const credentialJSON = {
         id: credential.id,
         rawId: bufferToBase64url(credential.rawId),
         type: credential.type,
         response: {
-          clientDataJSON: bufferToBase64url(coerceToArrayBuffer((credential.response as any).clientDataJSON)),
-          attestationObject: bufferToBase64url(coerceToArrayBuffer((credential.response as any).attestationObject)),
-          transports: (credential.response as any).transports || [],
+          clientDataJSON: bufferToBase64url(coerceToArrayBuffer(credential.response.clientDataJSON)),
+          attestationObject: bufferToBase64url(coerceToArrayBuffer(credential.response.attestationObject)),
+          transports: credential.response.transports || [],
         },
       };
 
-      // Finish registration
       const finishRes = await apiRequest('/biometric/webauthn/register/finish', {
         method: 'POST',
         body: JSON.stringify({ credential: credentialJSON }),
@@ -190,7 +184,7 @@ export default function VerifyPage() {
 
       setFingerprintEnrolled(true);
       alert('Fingerprint enrolled successfully!');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Fingerprint enroll error:', err);
       alert(err.data?.error || 'Fingerprint enrollment failed. Make sure to use your phone\'s fingerprint sensor.');
     } finally {
@@ -204,34 +198,30 @@ export default function VerifyPage() {
     }
     setLoading(true);
     try {
-      // Start authentication
       const startRes = await apiRequest('/biometric/webauthn/auth/start', {
         method: 'POST',
       });
       const options = startRes.options;
       options.challenge = base64urlToBuffer(options.challenge);
-      options.allowCredentials = options.allowCredentials.map((c: any) => ({
+      options.allowCredentials = options.allowCredentials.map(c => ({
         ...c,
         id: base64urlToBuffer(c.id),
       }));
 
-      // Call WebAuthn - this triggers the phone's fingerprint sensor!
-      const credential = await navigator.credentials.get({ publicKey: options as any });
+      const credential = await navigator.credentials.get({ publicKey: options });
 
-      // Convert to JSON-serializable format
       const credentialJSON = {
         id: credential.id,
         rawId: bufferToBase64url(credential.rawId),
         type: credential.type,
         response: {
-          clientDataJSON: bufferToBase64url(coerceToArrayBuffer((credential.response as any).clientDataJSON)),
-          authenticatorData: bufferToBase64url(coerceToArrayBuffer((credential.response as any).authenticatorData)),
-          signature: bufferToBase64url(coerceToArrayBuffer((credential.response as any).signature)),
-          userHandle: (credential.response as any).userHandle ? bufferToBase64url(coerceToArrayBuffer((credential.response as any).userHandle)) : null,
+          clientDataJSON: bufferToBase64url(coerceToArrayBuffer(credential.response.clientDataJSON)),
+          authenticatorData: bufferToBase64url(coerceToArrayBuffer(credential.response.authenticatorData)),
+          signature: bufferToBase64url(coerceToArrayBuffer(credential.response.signature)),
+          userHandle: credential.response.userHandle ? bufferToBase64url(coerceToArrayBuffer(credential.response.userHandle)) : null,
         },
       };
 
-      // Finish authentication
       const finishRes = await apiRequest('/biometric/webauthn/auth/finish', {
         method: 'POST',
         body: JSON.stringify({ credential: credentialJSON }),
@@ -243,7 +233,7 @@ export default function VerifyPage() {
         message: finishRes.message,
       });
       checkVerificationComplete();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Fingerprint verify error:', err);
       setFingerprintResult({
         verified: false,
@@ -258,14 +248,10 @@ export default function VerifyPage() {
   const checkVerificationComplete = async () => {
     if (faceResult?.verified || fingerprintResult?.verified) {
       setShowVoterDetails(true);
-      // Fetch polling station info
       try {
-        // In a real app, this would come from a dedicated endpoint or the user object
-        // For now, we'll construct it from user data or use mock data
         if (user?.polling_station) {
           setPollingStation(user.polling_station);
         } else {
-          // Mock polling station data based on user location/ID
           setPollingStation({
             name: 'Kasarani Primary School',
             code: 'PS-047-123',
@@ -307,7 +293,6 @@ export default function VerifyPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
         <div className="bg-white p-6 rounded-xl shadow mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Voter Verification</h1>
@@ -325,7 +310,6 @@ export default function VerifyPage() {
           </div>
         </div>
 
-        {/* Method Selector */}
         <div className="bg-white p-4 rounded-xl shadow mb-6">
           <div className="flex gap-4">
             <button
@@ -347,14 +331,12 @@ export default function VerifyPage() {
           </div>
         </div>
 
-        {/* Face Verification Panel */}
         {method === 'face' && (
           <div className="bg-white p-6 rounded-xl shadow mb-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Camera className="w-5 h-5 text-blue-600" /> Face Verification
             </h2>
 
-            {/* Camera Preview */}
             <div className="relative mb-4">
               <video
                 ref={videoRef}
@@ -414,7 +396,6 @@ export default function VerifyPage() {
           </div>
         )}
 
-        {/* Fingerprint Verification Panel */}
         {method === 'fingerprint' && (
           <div className="bg-white p-6 rounded-xl shadow mb-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -473,7 +454,6 @@ export default function VerifyPage() {
           </div>
         )}
 
-        {/* Voter Details & Polling Station - shown after successful verification */}
         {showVoterDetails && pollingStation && (
           <div className="bg-white p-6 rounded-xl shadow mb-6 border-2 border-green-300 animate-pulse">
             <div className="flex items-center justify-between mb-4">
@@ -483,7 +463,6 @@ export default function VerifyPage() {
               <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">ACCESS GRANTED</span>
             </div>
 
-            {/* Voter Info */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
               <div>
                 <p className="text-xs text-gray-500">Full Name</p>
@@ -503,7 +482,6 @@ export default function VerifyPage() {
               </div>
             </div>
 
-            {/* Polling Station */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <h3 className="text-lg font-bold text-blue-800 mb-4 flex items-center gap-2">
                 <MapPin className="w-5 h-5" /> Polling Station
@@ -528,12 +506,11 @@ export default function VerifyPage() {
           </div>
         )}
 
-        {/* Info Panel */}
         <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
           <h3 className="text-sm font-semibold text-blue-800 mb-2">About this verification</h3>
           <ul className="text-sm text-blue-700 space-y-1">
             <li>• <strong>Face ID:</strong> Uses your phone's front camera to capture a live image, matched against your enrolled face template (simulated matching).</li>
-            <li>• <strong>Fingerprint ID:</strong> Uses <strong>WebAuthn Platform Authenticator</strong> — your phone's actual fingerprint sensor (Android) or Face ID/Touch ID (iOS). This is the same tech used by banks and password managers.</li>
+            <li>• <strong>Fingerprint ID:</strong> Uses <strong>WebAuthn (Platform Authenticator)</strong> — your phone's actual fingerprint sensor (Android) or Face ID/Touch ID (iOS). This is the same tech used by banks and password managers.</li>
             <li>• Both methods are secure: biometric data never leaves your device (WebAuthn) or is encrypted at rest (face templates).</li>
             <li>• After successful verification, your voter details and assigned polling station are displayed.</li>
           </ul>
