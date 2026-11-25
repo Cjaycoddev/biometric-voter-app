@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { CheckCircle, XCircle, AlertCircle, Loader2, User, Mail, Phone, Badge, MapPin, Calendar, Shield } from 'lucide-react';
 
 const SEX_OPTIONS = ['Male', 'Female', 'Other'];
+const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 const ID_TYPES = [
   { value: 'national_id', label: 'National ID (7-8 digits)' },
   { value: 'passport', label: 'Passport' },
@@ -32,6 +33,10 @@ function validatePassport(id) {
   return id.length >= 6 && id.length <= 20;
 }
 
+function validateName(name) {
+  return /^[a-zA-Z\s'-]+$/.test(name.trim());
+}
+
 export default function RegisterPage() {
   const [step, setStep] = useState(1); // 1: personal, 2: location, 3: credentials
   const [form, setForm] = useState({
@@ -41,7 +46,7 @@ export default function RegisterPage() {
     id_type: 'national_id',
     id_number: '',
     date_of_birth: '',
-    sex: '',
+    gender: '',
     phone: '',
     email: '',
     password: '',
@@ -124,10 +129,15 @@ export default function RegisterPage() {
       case 'first_name':
         if (!value.trim()) error = 'First name is required';
         else if (value.trim().length < 2) error = 'First name must be at least 2 characters';
+        else if (!validateName(value)) error = 'First name cannot contain numbers or special characters';
+        break;
+      case 'middle_name':
+        if (value.trim() && !validateName(value)) error = 'Middle name cannot contain numbers or special characters';
         break;
       case 'last_name':
         if (!value.trim()) error = 'Last name is required';
         else if (value.trim().length < 2) error = 'Last name must be at least 2 characters';
+        else if (!validateName(value)) error = 'Last name cannot contain numbers or special characters';
         break;
       case 'id_number':
         if (!value.trim()) error = 'ID number is required';
@@ -144,8 +154,8 @@ export default function RegisterPage() {
           if (age > 120) error = 'Invalid date of birth';
         }
         break;
-      case 'sex':
-        if (!value) error = 'Sex is required';
+      case 'gender':
+        if (!value) error = 'Gender is required';
         break;
       case 'phone':
         if (!value.trim()) error = 'Phone number is required';
@@ -181,30 +191,25 @@ export default function RegisterPage() {
     return error;
   };
 
-  const handleChange = (name, value) => {
+const handleChange = (name, value) => {
     let newValue = value;
-    if (name === 'phone') newValue = formatPhoneInput(value);
     if (name === 'id_number') newValue = value.toUpperCase();
+    // Prevent numbers in name fields
+    if (['first_name', 'middle_name', 'last_name'].includes(name)) {
+      newValue = value.replace(/[^a-zA-Z\s'-]/g, '');
+    }
 
     setForm(prev => ({ ...prev, [name]: newValue }));
 
-    // Real-time validation for async fields
-    if (name === 'id_number' && value.length >= 6) {
+    // Real-time validation for async fields (only for ID number - no phone formatting during typing)
+    if (name === 'id_number' && newValue.length >= 6) {
       setLoading(true);
       apiRequest(`/public/validate-id?id_number=${encodeURIComponent(newValue)}`)
         .then(data => setIdNumberValid(!data.exists))
         .catch(() => setIdNumberValid(null))
         .finally(() => setLoading(false));
     }
-    if (name === 'phone' && validateKenyanPhone(newValue)) {
-      setLoading(true);
-      apiRequest(`/public/validate-phone?phone=${encodeURIComponent(newValue)}`)
-        .then(data => setPhoneValid(!data.exists))
-        .catch(() => setPhoneValid(null))
-        .finally(() => setLoading(false));
-    }
-    if (name === 'email' && value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      // Could add email validation endpoint
+    if (name === 'email' && newValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newValue)) {
       setEmailValid(true);
     }
 
@@ -216,11 +221,47 @@ export default function RegisterPage() {
 
   const handleBlur = (name) => {
     setTouched(prev => ({ ...prev, [name]: true }));
+    // Format phone on blur
+    if (name === 'phone' && form.phone) {
+      const formatted = formatPhoneInput(form.phone);
+      if (formatted !== form.phone) {
+        setForm(prev => ({ ...prev, phone: formatted }));
+      }
+      // Validate phone after formatting
+      if (validateKenyanPhone(formatted)) {
+        setLoading(true);
+        apiRequest(`/public/validate-phone?phone=${encodeURIComponent(formatted)}`)
+          .then(data => setPhoneValid(!data.exists))
+          .catch(() => setPhoneValid(null))
+          .finally(() => setLoading(false));
+      }
+    }
     const error = validateField(name, form[name]);
     if (error) setErrors(prev => ({ ...prev, [name]: error }));
   };
 
-  const handleSelectChange = async (name, value) => {
+  const getFieldIcon = (name) => {
+    if (errors[name] && touched[name]) return <XCircle className="w-5 h-5 text-red-500" />;
+    if (!errors[name] && touched[name] && form[name]) return <CheckCircle className="w-5 h-5 text-green-500" />;
+    return null;
+  };
+
+  const handleBlur = (name) => {
+    setTouched(prev => ({ ...prev, [name]: true }));
+    const error = validateField(name, form[name]);
+    if (error) setErrors(prev => ({ ...prev, [name]: error }));
+  };
+
+  const handleHierarchyChange = async (name, value) => {
+    // Handle ID type change - reset ID number and validation
+    if (name === 'id_type') {
+      setForm(prev => ({ ...prev, [name]: value, id_number: '' }));
+      setIdNumberValid(null);
+      setErrors(prev => ({ ...prev, id_number: '' }));
+      setTouched(prev => ({ ...prev, [name]: true }));
+      return;
+    }
+
     setForm(prev => ({ ...prev, [name]: value }));
     setTouched(prev => ({ ...prev, [name]: true }));
 
@@ -239,15 +280,14 @@ export default function RegisterPage() {
 
     const error = validateField(name, value);
     if (error) setErrors(prev => ({ ...prev, [name]: error }));
-    else setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   const validateStep = (stepNum) => {
-    const stepFields = {
-      1: ['first_name', 'last_name', 'id_type', 'id_number', 'date_of_birth', 'sex'],
-      2: ['county_id', 'constituency_id', 'ward_id', 'polling_station_id'],
-      3: ['phone', 'email', 'password', 'confirm_password'],
-    };
+const stepFields = {
+    1: ['first_name', 'last_name', 'id_type', 'id_number', 'date_of_birth', 'gender'],
+    2: ['county_id', 'constituency_id', 'ward_id', 'polling_station_id'],
+    3: ['phone', 'email', 'password', 'confirm_password'],
+  };
     const fields = stepFields[stepNum] || [];
     let valid = true;
     const newErrors = {};
@@ -294,7 +334,7 @@ export default function RegisterPage() {
         id_type: form.id_type,
         id_number: form.id_number.trim(),
         date_of_birth: form.date_of_birth,
-        sex: form.sex,
+        gender: form.gender,
         phone: form.phone.trim(),
         email: form.email.trim() || null,
         password: form.password,
@@ -311,31 +351,25 @@ export default function RegisterPage() {
 
       setSubmitSuccess(true);
       setTimeout(() => router.push('/login'), 2000);
-    } catch (err: any) {
+    } catch (err) {
       setSubmitError(err.data?.error || 'Registration failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getFieldIcon = (name) => {
-    if (errors[name] && touched[name]) return <XCircle className="w-5 h-5 text-red-500" />;
-    if (!errors[name] && touched[name] && form[name]) return <CheckCircle className="w-5 h-5 text-green-500" />;
-    return null;
-  };
-
-  const Input = ({ label, name, type = 'text', icon, children, ...props }) => (
+  const Input = ({ label, name, type = 'text', icon, children, errors, touched, form, handleChange, handleBlur, getFieldIcon, ...props }) => (
     <div className="space-y-1">
-      <label className="block text-sm font-medium text-gray-700">{label} <span className="text-red-500">*</span></label>
+      <label className="block text-sm font-medium text-black pl-1">{label} <span className="text-red-500">*</span></label>
       <div className="relative">
         {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">{icon}</div>}
         {children || (
           <input
             type={type}
             name={name}
-            className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition ${
+            className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none transition ${
               errors[name] && touched[name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-            } ${icon ? '' : 'pl-4'}`}
+            }`}
             value={form[name]}
             onChange={(e) => handleChange(name, e.target.value)}
             onBlur={() => handleBlur(name)}
@@ -348,18 +382,18 @@ export default function RegisterPage() {
     </div>
   );
 
-  const Select = ({ label, name, options, placeholder, icon, disabled, ...props }) => (
+  const Select = ({ label, name, options, placeholder, icon, disabled, errors, touched, form, handleChange, handleBlur, getFieldIcon, ...props }) => (
     <div className="space-y-1">
-      <label className="block text-sm font-medium text-gray-700">{label} <span className="text-red-500">*</span></label>
+      <label className="block text-sm font-medium text-black pl-1">{label} <span className="text-red-500">*</span></label>
       <div className="relative">
         {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">{icon}</div>}
         <select
           name={name}
-          className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none transition ${
+          className={`w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-black focus:outline-none appearance-none transition ${
             errors[name] && touched[name] ? 'border-red-500 bg-red-50' : 'border-gray-300'
           } ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
           value={form[name]}
-          onChange={(e) => handleSelectChange(name, e.target.value)}
+          onChange={(e) => handleChange(name, e.target.value)}
           onBlur={() => handleBlur(name)}
           disabled={disabled}
           {...props}
@@ -394,16 +428,16 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-black via-white to-green-700 py-12 px-4">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/80 backdrop-blur rounded-full shadow-lg mb-6">
-            <Shield className="w-8 h-8 text-blue-600" />
-            <span className="text-xl font-bold text-gray-900">EngageLoop</span>
+          <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/90 backdrop-blur rounded-full shadow-lg mb-6 border-2 border-black">
+            <Shield className="w-8 h-8 text-black" />
+            <span className="text-xl font-bold text-black">MwananchiBallot</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Voter Registration</h1>
-          <p className="text-gray-600">Register as a Kenyan voter with biometric verification</p>
+          <h1 className="text-3xl font-bold text-black mb-2">Voter Registration</h1>
+          <p className="text-gray-700">Register as a Kenyan voter with biometric verification</p>
         </div>
 
         {/* Progress Steps */}
@@ -411,20 +445,20 @@ export default function RegisterPage() {
           {[1, 2, 3].map(s => (
             <div key={s} className="flex items-center gap-2">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                step >= s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'
+                step >= s ? 'bg-black text-white' : 'bg-gray-200 text-gray-500'
               }`}>
                 {step > s ? <CheckCircle className="w-5 h-5" /> : s}
               </div>
-              {s < 3 && <div className={`w-16 h-1 rounded ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+              {s < 3 && <div className={`w-16 h-1 rounded ${step > s ? 'bg-black' : 'bg-gray-200'}`} />}
             </div>
           ))}
         </div>
 
         {/* Step Labels */}
         <div className="mb-8 flex justify-center gap-8 text-sm">
-          <span className={step >= 1 ? 'font-semibold text-blue-600' : 'text-gray-400'}>Personal Details</span>
-          <span className={step >= 2 ? 'font-semibold text-blue-600' : 'text-gray-400'}>Location</span>
-          <span className={step >= 3 ? 'font-semibold text-blue-600' : 'text-gray-400'}>Credentials</span>
+          <span className={step >= 1 ? 'font-semibold text-black' : 'text-gray-400'}>Personal Details</span>
+          <span className={step >= 2 ? 'font-semibold text-black' : 'text-gray-400'}>Location</span>
+          <span className={step >= 3 ? 'font-semibold text-black' : 'text-gray-400'}>Credentials</span>
         </div>
 
         {/* Form */}
@@ -439,17 +473,17 @@ export default function RegisterPage() {
           {/* Step 1: Personal Details */}
           {step === 1 && (
             <div className="space-y-6 animate-fade-in">
-              <div className="flex items-center gap-2 text-blue-600 mb-4">
+              <div className="flex items-center gap-2 text-black mb-4">
                 <User className="w-5 h-5" />
                 <h3 className="text-lg font-semibold">Personal Information</h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input label="First Name" name="first_name" type="text" icon={<User className="w-5 h-5" />} placeholder="John" />
-                <Input label="Middle Name (optional)" name="middle_name" type="text" icon={<User className="w-5 h-5" />} placeholder="Middle" />
+                <Input label="First Name" name="first_name" type="text" icon={<User className="w-5 h-5" />} placeholder="John" errors={errors} touched={touched} form={form} handleChange={handleChange} handleBlur={handleBlur} getFieldIcon={getFieldIcon} />
+                <Input label="Middle Name (optional)" name="middle_name" type="text" icon={<User className="w-5 h-5" />} placeholder="Middle" errors={errors} touched={touched} form={form} handleChange={handleChange} handleBlur={handleBlur} getFieldIcon={getFieldIcon} />
               </div>
 
-              <Input label="Last Name" name="last_name" type="text" icon={<User className="w-5 h-5" />} placeholder="Doe" />
+              <Input label="Last Name" name="last_name" type="text" icon={<User className="w-5 h-5" />} placeholder="Doe" errors={errors} touched={touched} form={form} handleChange={handleChange} handleBlur={handleBlur} getFieldIcon={getFieldIcon} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Select
@@ -458,14 +492,28 @@ export default function RegisterPage() {
                   options={ID_TYPES}
                   placeholder="Select ID type"
                   icon={<Badge className="w-5 h-5" />}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleHierarchyChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
                 <Input
                   label={form.id_type === 'national_id' ? 'National ID Number' : 'Passport Number'}
                   name="id_number"
-                  type="text"
+                  type={form.id_type === 'national_id' ? 'text' : 'text'}
+                  inputMode={form.id_type === 'national_id' ? 'numeric' : 'text'}
+                  pattern={form.id_type === 'national_id' ? '[0-9]*' : ''}
                   icon={<Badge className="w-5 h-5" />}
                   placeholder={form.id_type === 'national_id' ? '12345678' : 'A1234567'}
                   maxLength={form.id_type === 'national_id' ? 8 : 20}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
               </div>
 
@@ -476,19 +524,31 @@ export default function RegisterPage() {
                   type="date"
                   icon={<Calendar className="w-5 h-5" />}
                   max={new Date(Date.now() - 18 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
                 <Select
-                  label="Sex"
-                  name="sex"
-                  options={SEX_OPTIONS.map(s => ({ id: s, name: s }))}
-                  placeholder="Select sex"
+                  label="Gender"
+                  name="gender"
+                  options={GENDER_OPTIONS.map(s => ({ id: s, name: s }))}
+                  placeholder="Select gender"
                   icon={<User className="w-5 h-5" />}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleHierarchyChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
               </div>
 
               {/* Step Navigation */}
               <div className="flex justify-end pt-4 border-t border-gray-100">
-                <button type="button" onClick={nextStep} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition flex items-center gap-2">
+                <button type="button" onClick={nextStep} className="px-6 py-3 bg-black text-white rounded-xl font-semibold hover:bg-gray-900 transition flex items-center gap-2">
                   Next <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                 </button>
               </div>
@@ -498,7 +558,7 @@ export default function RegisterPage() {
           {/* Step 2: Location Hierarchy */}
           {step === 2 && (
             <div className="space-y-6 animate-fade-in">
-              <div className="flex items-center gap-2 text-blue-600 mb-4">
+              <div className="flex items-center gap-2 text-black mb-4">
                 <MapPin className="w-5 h-5" />
                 <h3 className="text-lg font-semibold">Voting Location</h3>
               </div>
@@ -512,6 +572,12 @@ export default function RegisterPage() {
                   placeholder="Select your county"
                   icon={<MapPin className="w-5 h-5" />}
                   disabled={counties.length === 0}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleHierarchyChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
                 <Select
                   label="Constituency"
@@ -520,6 +586,12 @@ export default function RegisterPage() {
                   placeholder="Select your constituency"
                   icon={<MapPin className="w-5 h-5" />}
                   disabled={constituencies.length === 0 || !form.county_id}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleHierarchyChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
                 <Select
                   label="Ward (CAW)"
@@ -528,6 +600,12 @@ export default function RegisterPage() {
                   placeholder="Select your ward"
                   icon={<MapPin className="w-5 h-5" />}
                   disabled={wards.length === 0 || !form.constituency_id}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleHierarchyChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
                 <Select
                   label="Polling Station"
@@ -536,25 +614,31 @@ export default function RegisterPage() {
                   placeholder="Select your polling station"
                   icon={<MapPin className="w-5 h-5" />}
                   disabled={pollingStations.length === 0 || !form.ward_id}
+                  errors={errors}
+                  touched={touched}
+                  form={form}
+                  handleChange={handleHierarchyChange}
+                  handleBlur={handleBlur}
+                  getFieldIcon={getFieldIcon}
                 />
               </div>
 
               {/* Location Summary */}
               {(form.county_id || form.constituency_id || form.ward_id || form.polling_station_id) && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                  <h4 className="font-medium text-blue-800 mb-2">Selected Location:</h4>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <h4 className="font-medium text-black mb-2">Selected Location:</h4>
                   <div className="flex flex-wrap gap-2 text-sm">
                     {form.county_id && counties.find(c => c.id === form.county_id) && (
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">{counties.find(c => c.id === form.county_id).name}</span>
+                      <span className="px-3 py-1 bg-gray-100 text-black rounded-full">{counties.find(c => c.id === form.county_id).name}</span>
                     )}
                     {form.constituency_id && constituencies.find(c => c.id === form.constituency_id) && (
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">{constituencies.find(c => c.id === form.constituency_id).name}</span>
+                      <span className="px-3 py-1 bg-gray-100 text-black rounded-full">{constituencies.find(c => c.id === form.constituency_id).name}</span>
                     )}
                     {form.ward_id && wards.find(w => w.id === form.ward_id) && (
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">{wards.find(w => w.id === form.ward_id).name}</span>
+                      <span className="px-3 py-1 bg-gray-100 text-black rounded-full">{wards.find(w => w.id === form.ward_id).name}</span>
                     )}
                     {form.polling_station_id && pollingStations.find(p => p.id === form.polling_station_id) && (
-                      <span className="px-3 py-1 bg-blue-600 text-white rounded-full font-medium">{pollingStations.find(p => p.id === form.polling_station_id).name}</span>
+                      <span className="px-3 py-1 bg-black text-white rounded-full font-medium">{pollingStations.find(p => p.id === form.polling_station_id).name}</span>
                     )}
                   </div>
                 </div>
@@ -565,7 +649,7 @@ export default function RegisterPage() {
                 <button type="button" onClick={prevStep} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition flex items-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg> Back
                 </button>
-                <button type="button" onClick={nextStep} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition flex items-center gap-2">
+                <button type="button" onClick={nextStep} className="px-6 py-3 bg-black text-white rounded-xl font-semibold hover:bg-gray-900 transition flex items-center gap-2">
                   Next <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                 </button>
               </div>
@@ -575,7 +659,7 @@ export default function RegisterPage() {
           {/* Step 3: Credentials */}
           {step === 3 && (
             <div className="space-y-6 animate-fade-in">
-              <div className="flex items-center gap-2 text-blue-600 mb-4">
+              <div className="flex items-center gap-2 text-black mb-4">
                 <Shield className="w-5 h-5" />
                 <h3 className="text-lg font-semibold">Account Credentials</h3>
               </div>
@@ -587,6 +671,12 @@ export default function RegisterPage() {
                 icon={<Phone className="w-5 h-5" />}
                 placeholder="+2547XXXXXXXX"
                 maxLength={14}
+                errors={errors}
+                touched={touched}
+                form={form}
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                getFieldIcon={getFieldIcon}
               />
               <p className="text-xs text-gray-500">Format: +2547XXXXXXXX (Safaricom, Airtel, Telkom)</p>
 
@@ -596,6 +686,12 @@ export default function RegisterPage() {
                 type="email"
                 icon={<Mail className="w-5 h-5" />}
                 placeholder="john@example.com"
+                errors={errors}
+                touched={touched}
+                form={form}
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                getFieldIcon={getFieldIcon}
               />
 
               <Input
@@ -604,6 +700,12 @@ export default function RegisterPage() {
                 type="password"
                 icon={<Shield className="w-5 h-5" />}
                 placeholder="••••••••"
+                errors={errors}
+                touched={touched}
+                form={form}
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                getFieldIcon={getFieldIcon}
               />
               <div className="text-xs text-gray-500 space-y-1 ml-1">
                 <p className={form.password.length >= 8 ? 'text-green-600' : 'text-gray-400'}>✓ At least 8 characters</p>
@@ -619,6 +721,12 @@ export default function RegisterPage() {
                 type="password"
                 icon={<Shield className="w-5 h-5" />}
                 placeholder="••••••••"
+                errors={errors}
+                touched={touched}
+                form={form}
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                getFieldIcon={getFieldIcon}
               />
 
               {/* Step Navigation */}
@@ -643,9 +751,9 @@ export default function RegisterPage() {
         </form>
 
         {/* Login Link */}
-        <p className="mt-8 text-center text-gray-600">
+        <p className="mt-8 text-center text-gray-700">
           Already have an account?{' '}
-          <a href="/login" className="text-blue-600 hover:underline font-medium">Sign in</a>
+          <a href="/login" className="text-black hover:underline font-medium">Sign in</a>
         </p>
       </div>
 
